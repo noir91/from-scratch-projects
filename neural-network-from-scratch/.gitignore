@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.tar
+Lib/
+Include/
+Scripts/
+*.egg-info/
+*.dist-info/
+.ipynb_checkpoints/
+
+# Environments
+.env
+.venv/
+venv/
+ENV/
+
+# VSCode settings (optional)
+.vscode/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+"datasets/credits.csv" 
+"datasets/ratings.csv" 

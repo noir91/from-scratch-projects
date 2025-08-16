@@ -1,16 +1,5 @@
 import numpy as np
-
-# Activation functions
-def sigmoid(z):
-  f = 1/(1+np.exp(-z))
-  return f
-
-def softmax(z):
-  f = np.exp(z - np.max(z, axis = 0 , keepdims = True))
-  return f / np.sum(f,axis = 0, keepdims = True)
-
-def relu(z):
-   return np.maximum(0,z)
+from activation_func.activations import relu, relu_derivative, softmax
 
 def random_init(layers_dim):
   np.random.seed(0)
@@ -49,26 +38,22 @@ def crossentropy(y_pred, y_true):
 
    return loss
 
-# ReLU activation derivative
-def relu_derivative(Z):
-  return Z > 0
-
 # Backward propagation
 def backward(y_true, cache, params):
   m = y_true.shape[1]
   dz3 = cache["A3"] - y_true
   dw3 = (1/m) * dz3 @ cache["A2"].T
-  db3 = np.sum((1/m) * dz3, axis = 1, keepdims = True)
+  db3 = (1/m) * np.sum( dz3, axis = 1, keepdims = True)
 
   da2 = params["W3"].T @ dz3
   dz2 = da2 * relu_derivative(cache["Z2"])
   dw2 = (1/m) * dz2 @ cache["A1"].T
-  db2 = np.sum((1/m) * dz2, axis = 1, keepdims = True)
+  db2 = (1/m) * np.sum( dz2, axis = 1, keepdims = True)
 
   da1 = params["W2"].T @ dz2
   dz1 = da1 * relu_derivative(cache["Z1"])
   dw1 = (1/m) * dz1 @ cache["X"].T
-  db1 = np.sum((1/m) * dz1, axis = 1, keepdims = True)
+  db1 = (1/m) * np.sum(dz1, axis = 1, keepdims = True)
 
   gradients = { "dW3":dw3, "db3":db3,
   "dW2":dw2, "db2":db2,
@@ -92,6 +77,7 @@ def train(lr, X, y_true, layers_dim, epochs):
   batch_size = 64
   m = X.shape[1]
   num_indices = m // batch_size
+
   for epoch in range(epochs):
     # shuffle on each epoch
     perm = np.random.permutation(m)
@@ -114,16 +100,9 @@ def train(lr, X, y_true, layers_dim, epochs):
 
      # backward prop
      gradients = backward(y_batch, cache, params)
-
      # update weights
-     params["W1"] -= lr*gradients["dW1"]
-     params["b1"] -= lr*gradients["db1"]
-
-     params["W2"] -= lr*gradients["dW2"]
-     params["b2"] -= lr*gradients["db2"]
-
-     params["W3"] -= lr*gradients["dW3"]
-     params["b3"] -= lr*gradients["db3"]
+     params = update_weights(lr, params, gradients)
+     
     print(f"Epochs : {epoch+1}, Loss: {epoch_loss:.4f}")
     return params
 
@@ -132,3 +111,16 @@ def accuracy(X, y_true, params):
   y_pred, _ = forward(X, params)
   preds = np.argmax(y_pred, axis=0)
   return np.mean(preds == y_true)
+
+# Update gradients
+def update_weights(lr,  params, gradients):
+  params["W1"] -= lr*gradients["dW1"]
+  params["b1"] -= lr*gradients["db1"]
+
+  params["W2"] -= lr*gradients["dW2"]
+  params["b2"] -= lr*gradients["db2"]
+
+  params["W3"] -= lr*gradients["dW3"]
+  params["b3"] -= lr*gradients["db3"]
+  
+  return params

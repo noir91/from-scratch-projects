@@ -15,7 +15,7 @@ class SGD:
         Vtheta = B*Vt-1 + (1-B)*Vt
 
     """
-    def __init__(self, lr, params, gradients, ema_momentum = 0.9, momentum = True):
+    def __init__(self, lr, params, gradients, ema_momentum = 0.8, momentum = False):
         self.lr = lr
         self.params = params
         self.gradients = gradients
@@ -27,16 +27,15 @@ class SGD:
     def step(self): 
         n = len(self.gradients)
         num_layers = n // 2
-
         if self.momentum == True:
-            
+
             # Initialize Velocity and history
             for i in range(1, num_layers):    
                 self.VdW[f'W{i}'] = np.zeros_like(self.params[f'W{i}'])
                 self.Vdb[f'b{i}'] = np.zeros_like(self.params[f'b{i}'])
 
             for i in range(1, num_layers):
-                
+
                 # Applying Velocity for momentum
                 self.VdW[f'W{i}'] = self.ema_momentum * self.VdW[f'W{i}'] + (1 - self.ema_momentum) * self.gradients[f'dW{i}']
                 self.Vdb[f'b{i}'] = self.ema_momentum * self.Vdb[f'b{i}'] + (1 - self.ema_momentum) * self.gradients[f'db{i}']

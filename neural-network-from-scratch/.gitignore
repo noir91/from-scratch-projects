@@ -1,27 +1,51 @@
 # Python
 __pycache__/
-*.py[cod]
-*.tar
-Lib/
-Include/
-Scripts/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.nox/
+dist/
+build/
 *.egg-info/
-*.dist-info/
+.pytest_cache/
+htmlcov/
 .ipynb_checkpoints/
 
-# Environments
-.env
-.venv/
-venv/
-ENV/
+# Deep Learning specific
+# Trained models
+*.h5
+*.pth
+*.pt
+*.tf
+*.onnx
+*.pb
+saved_models/
+checkpoints/
 
-# VSCode settings (optional)
+# Datasets and data processing outputs
+data/
+datasets/
+raw_data/
+processed_data/
+results/
+logs/
+tensorboard_logs/
+runs/
+
+# IDE specific files
+.idea/
 .vscode/
+*.swp
+*.swo
 
-# OS
+# Operating System files
 .DS_Store
-
-# Logs
-*.log
-"datasets/credits.csv" 
-"datasets/ratings.csv" 
+Thumbs.db

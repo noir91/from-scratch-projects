@@ -4,7 +4,7 @@ import copy
 class RMSprop:
     """
     epsilon is used for numerical stability
-    
+
     func step()
         - takes gradient descent steps
         - updates weights
@@ -15,32 +15,29 @@ class RMSprop:
         Vtheta = B_2 * Vt-1 + (1-B_2) * Vt
 
     """
-    def __init__(self, lr, params, gradients, ema_momentum = 0.9, momentum = False):
+    def __init__(self, lr, params, gradients, epsilon = 1e-8, ema_momentum_beta2 = 0.9):
         self.lr = lr
         self.params = params
         self.gradients = gradients
-        self.ema_momentum = ema_momentum
-        self.momentum = momentum
+        self.ema_momentum_beta2 = ema_momentum_beta2
         self.SdW = {}
         self.Sdb = {}      
+        self.epsilon = epsilon
 
-    def step(self): 
-
-        n = len(self.gradients)
-        num_layers = n // 2
-        epsilon = 1e-8
         # Initialize Velocity and history
-        for i in range(1, num_layers):    
+        for i in range(1, len(self.gradients) // 2):    
             self.SdW[f'W{i}'] = np.zeros_like(self.params[f'W{i}'])
             self.Sdb[f'b{i}'] = np.zeros_like(self.params[f'b{i}'])
+    
+    def step(self):
 
-        for i in range(1, num_layers):
+        for i in range(1, len(self.gradients) // 2):
             # Applying Velocity for momentum
             self.SdW[f'W{i}'] = self.ema_momentum_beta2 * self.SdW[f'W{i}'] + (1 - self.ema_momentum_beta2) * (self.gradients[f'dW{i}'])**2
             self.Sdb[f'b{i}'] = self.ema_momentum_beta2 * self.Sdb[f'b{i}'] + (1 - self.ema_momentum_beta2) * (self.gradients[f'db{i}'])**2
             
             # Update rule
-            self.params[f'W{i}'] -= self.lr * self.gradients[f'W{i}'] / np.sqrt(self.Sdw[f'W{i}'] + epsilon)
-            self.params[f'b{i}'] -= self.lr * self.gradients[f'b{i}'] / np.sqrt(self.Sdb[f'b{i}'] + epsilon)
+            self.params[f'W{i}'] -= self.lr * self.gradients[f'dW{i}'] / np.sqrt(self.SdW[f'W{i}'] + self.epsilon)
+            self.params[f'b{i}'] -= self.lr * self.gradients[f'db{i}'] / np.sqrt(self.Sdb[f'b{i}'] + self.epsilon)
         
         return self.params

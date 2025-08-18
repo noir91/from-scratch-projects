@@ -42,39 +42,38 @@ class Adam:
         self.SdW = {}
         self.Sdb = {}      
         self.epsilon = epsilon
-        
-    def step(self): 
-        n = len(self.gradients)
-        num_layers = n // 2
-        epsilon = 1e-8
-        
-        # Initialize Velocity and history - Momentum
-        for t in range(1, num_layers):    
-            self.VdW[f'W{t}'] = np.zeros_like(self.params[f'W{t}'])
-            self.Vdb[f'b{t}'] = np.zeros_like(self.params[f'b{t}'])
+        self.t = 0
+
+         # Initialize Velocity and history - Momentum
+        for i in range(1, len(self.gradients)//2):    
+            self.VdW[f'W{i}'] = np.zeros_like(self.params[f'W{i}'])
+            self.Vdb[f'b{i}'] = np.zeros_like(self.params[f'b{i}'])
                 
             # Initiatilize Velocity and history - RMSprop
-            self.SdW[f'W{t}'] = np.zeros_like(self.params[f'W{t}'])
-            self.Sdb[f'b{t}'] = np.zeros_like(self.params[f'b{t}'])
+            self.SdW[f'W{i}'] = np.zeros_like(self.params[f'W{i}'])
+            self.Sdb[f'b{i}'] = np.zeros_like(self.params[f'b{i}'])
+        
+    def step(self): 
+        self.t += 1
 
-        for i in range(1, num_layers):
+        for i  in range(1, len(self.gradients) // 2):
             # Applying Velocity for momentum & RMSprop
-            self.VdW[f'W{t}'] = self.ema_momentum * self.VdW[f'W{t}'] + (1 - self.ema_momentum) * (self.gradients[f'dW{t}'])
-            self.SdW[f'W{t}'] = self.ema_momentum_beta2 * self.SdW[f'W{t}'] + (1 - self.ema_momentum_beta2) * self.gradients[f'dW{t}']**2
+            self.VdW[f'W{i}'] = self.ema_momentum * self.VdW[f'W{i}'] + (1 - self.ema_momentum) * (self.gradients[f'dW{i}'])
+            self.SdW[f'W{i}'] = self.ema_momentum_beta2 * self.SdW[f'W{i}'] + (1 - self.ema_momentum_beta2) * self.gradients[f'dW{i}']**2
 
-            self.Vdb[f'b{t}'] = self.ema_momentum * self.Vdb[f'b{t}'] + (1 - self.ema_momentum) * (self.gradients[f'db{t}'])
-            self.Sdb[f'b{t}'] = self.ema_momentum_beta2 * self.Sdb[f'b{t}'] + (1 - self.ema_momentum_beta2) * self.gradients[f'db{t}']**2
+            self.Vdb[f'b{i}'] = self.ema_momentum * self.Vdb[f'b{i}'] + (1 - self.ema_momentum) * (self.gradients[f'db{i}'])
+            self.Sdb[f'b{i}'] = self.ema_momentum_beta2 * self.Sdb[f'b{i}'] + (1 - self.ema_momentum_beta2) * self.gradients[f'db{i}']**2
                     
             # Bias corrected momentum & RMSprop
-            self.VdW_corrected = self.VdW[f'W{t}']/(1 - (self.ema_momentum**i)) 
-            self.SdW_corrected = self.SdW[f'W{t}']/(1 - (self.ema_momentum_beta2**i))
+            self.VdW_corrected = self.VdW[f'W{i}']/(1 - (self.ema_momentum ** self.t)) 
+            self.SdW_corrected = self.SdW[f'W{i}']/(1 - (self.ema_momentum_beta2 ** self.t))
 
-            self.Vdb_corrected = self.Vdb[f'b{t}']/(1 - (self.ema_momentum**i)) 
-            self.Sdb_corrected = self.Sdb[f'b{t}']/(1 - (self.ema_momentum_beta2**i))
+            self.Vdb_corrected = self.Vdb[f'b{i}']/(1 - (self.ema_momentum ** self.t)) 
+            self.Sdb_corrected = self.Sdb[f'b{i}']/(1 - (self.ema_momentum_beta2 ** self.t))
             
             # Update rule 
-            self.params[f'W{t}'] -= self.lr * self.VdW_corrected / np.sqrt(self.SdW_corrected + self.epsilon)
-            self.params[f'b{t}'] -= self.lr * self.Vdb_corrected / np.sqrt(self.Sdb_corrected + self.epsilon)
-
+            self.params[f'W{i}'] -= self.lr * self.VdW_corrected / np.sqrt(self.SdW_corrected + self.epsilon)
+            self.params[f'b{i}'] -= self.lr * self.Vdb_corrected / np.sqrt(self.Sdb_corrected + self.epsilon)
         
+        self.t +=1
         return self.params

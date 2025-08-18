@@ -30,12 +30,13 @@ class GradCheck:
         the gradients at disposal are wrongly caclulated.
     """
 
-    def __init__(self, X, Y, layers_dim, epsilon):
+    def __init__(self, X, Y, layers_dim, epsilon, activations):
         self.layers_dim = layers_dim
         self.X = X
         self.Y = Y
         self.epsilon = epsilon
         self.layers_dim = layers_dim
+        self.activations = activations
 
     def initialize_params(self):
         parameters = random_init(self.layers_dim)
@@ -80,7 +81,7 @@ class GradCheck:
 
             theta_plus[i] += epsilon
             parameters_plus = self.vectors_to_dictionary(theta_plus)
-            y_pred, _ = forward(self.X, parameters_plus)
+            y_pred, _ = forward(self.X, parameters_plus, activations = self.activations)
             J_plus = crossentropy(y_pred = y_pred, y_true = self.Y) # obtaining J( theta + epsilon )
         
             # theta nudged down by epsilon
@@ -88,7 +89,7 @@ class GradCheck:
 
             theta_minus[i] -= epsilon
             parameters_minus = self.vectors_to_dictionary(theta_minus)
-            y_pred, _ = forward(self.X, parameters_minus)
+            y_pred, _ = forward(self.X, parameters_minus, activations = self.activations)
             J_minus = crossentropy(y_pred = y_pred, y_true = self.Y) # obtaining J( theta - epsilon)
 
             # calculating numerical gradients for ith
@@ -112,20 +113,21 @@ class GradCheck:
 
         return gradapprox 
             
-    def gradient_checker(self):
+    def gradient_checker(self, parameters):
 
         # loading in randomly intialized parameters
-        parameters = self.initialize_params()
+        if parameters == None:
+            parameters = self.initialize_params()
 
         # converting dictionary to vectors
         parameters_vectorized = self.dictionary_to_vectors(parameters)
     
         # caching original forward prop parameters for backprop gradients at next step
         parameters_original = self.vectors_to_dictionary(parameters_vectorized)
-        _, cache = forward(self.X, parameters_original)
+        _, cache = forward(self.X, parameters_original, self.activations)
 
         # caching backprop gradients 
-        grad = backward(y_true = self.Y, cache = cache, params= parameters)
+        grad = backward(y_true = self.Y, cache = cache, params= parameters, activations = self.activations)
         grad_true = self.dictionary_to_vectors(grad)
         
         gradapprox = self.gradients_zero_like(grad_true= grad_true, parameter_vectorized= parameters_vectorized, epsilon= self.epsilon)

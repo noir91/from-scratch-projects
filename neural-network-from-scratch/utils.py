@@ -1,6 +1,6 @@
 import numpy as np
-from activation_func.activations import relu, relu_derivative, softmax
-
+from activation_func.activations import relu, relu_derivative, sigmoid, softmax, sigmoid_derviative
+from optim.SGD import SGD
 def random_init(layers_dim):
   np.random.seed(0)
   params = {}
@@ -12,57 +12,63 @@ def random_init(layers_dim):
      params["b" + str(i)]= np.zeros((layers_dim[i],1))
   return params
 
-def forward(X, params):
+def forward(X, params, activations = []):
+  # Caching X to A0
+  cache = {'A0': X}
+  num_layers = len(params) // 2
 
-  z1 = params["W1"] @ X + params["b1"]
-  a1 = relu(z1)
+  # Forward Propagation
+  for i in range(1,num_layers+1):
+    cache['Z' + str(i)] = params[f'W{i}'] @ cache[f'A{i-1}'] + params[f'b{i}']
+    cache['A' + str(i)] = activations[i-1](cache[f'Z{i}'])
 
-  z2 = params["W2"] @ a1 + params["b2"]
-  a2 = relu(z2)
+  y_pred = cache[f'A{num_layers}']
 
-  z3 = params["W3"] @ a2 + params["b3"]
-  a3 = softmax(z3)
-
-
-  cache = {"X": X,
-           "A1":a1, "A2":a2, "A3":a3,
-           "Z1":z1, "Z2": z2, "Z3": z3
-           }
-  y_pred = a3
   return y_pred, cache
 
 # Cross Entropy Loss
 def crossentropy(y_pred, y_true):
-   sample =-np.sum(y_true * np.log(y_pred + 1e-8) , axis = 0)
-   loss = np.mean(sample)
-
-   return loss
+  sample =-np.sum(y_true * np.log(y_pred + 1e-8) , axis = 0)
+  loss = np.mean(sample)
+  return loss
 
 # Backward propagation
-def backward(y_true, cache, params):
+def backward(y_true, cache, params, activations = []):
   m = y_true.shape[1]
-  dz3 = cache["A3"] - y_true
-  dw3 = (1/m) * dz3 @ cache["A2"].T
-  db3 = (1/m) * np.sum( dz3, axis = 1, keepdims = True)
+  L = len(params) // 2
 
-  da2 = params["W3"].T @ dz3
-  dz2 = da2 * relu_derivative(cache["Z2"])
-  dw2 = (1/m) * dz2 @ cache["A1"].T
-  db2 = (1/m) * np.sum( dz2, axis = 1, keepdims = True)
+  # Performing backpropogation for last layer since it does not follow a general format
+  AL = cache['A' + str(L)]
+  dZL =  AL - y_true
+  A_prev = np.dot(params[f'W{L}'].T, dZL)
 
-  da1 = params["W2"].T @ dz2
-  dz1 = da1 * relu_derivative(cache["Z1"])
-  dw1 = (1/m) * dz1 @ cache["X"].T
-  db1 = (1/m) * np.sum(dz1, axis = 1, keepdims = True)
+  dWL = (1.0 / m) * np.dot(dZL, A_prev.T)
+  dbL = (1.0 / m) * np.sum(dZL, axis = 1, keepdims = True)
+  gradients = {'dZ' + str(L): dZL,
+               'dW' + str(L): dWL,
+               'db' + str(L): dbL
+               }
+  
+  # Calculating Back propagation on the rest of the network
+  for l in reversed(range(1, L)): 
+    gradients['dA' + str(l)] = np.dot(params[f'W{l+1}'].T, gradients[f'dZ{l+1}'])
+    # If Activation function is a sigmoid, use derivative of a sigmoid
+    if activations[l-1] == sigmoid:
+      gradients['dZ' + str(l)] = gradients[f'dA{l}'] * sigmoid_derviative(cache[f'Z{l}'])
+    
+    # Else use derivative of ReLU
+    else:
+      gradients['dZ' + str(l)] = gradients[f'dA{l}'] * relu_derivative(cache[f'Z{l}'])
+      gradients['dW' + str(l)] = (1.0 / m) * np.dot(gradients[f'dZ{l}'], cache[f'A{l-1}'].T)
+      gradients['db' + str(l)] = (1.0 / m) * np.sum(gradients[f'dZ{l}'], axis = 1, keepdims = True)
 
-  gradients = { "dW3":dw3, "db3":db3,
-  "dW2":dw2, "db2":db2,
-  "dW1":dw1, "db1":db1 }
-
+  # Storing dW and db to gradients
+  gradients = {k: v for k, v in gradients.items() if k.startswith('dW') or k.startswith('db')}
   return gradients
 
 # One-Hot Encoding
 def onehot(y, classes):
+
   one_hot_y = np.zeros((classes, y.size))
   one_hot_y[y, np.arange(y.size)] = 1
   return one_hot_y
@@ -90,25 +96,28 @@ def train(lr, X, y_true, layers_dim, epochs):
      end = start + batch_size
      X_batch = X_shuffled[:,start:end]
      y_batch = y_shuffled[:,start:end]
+
      # forward pass
-     y_pred, cache = forward(X_batch, params)
+     y_pred, cache = forward(X_batch, params, activations = [relu, relu, softmax])
 
      # computing loss
      loss = crossentropy(y_pred, y_batch)
      epoch_loss += loss
-     #print(f"Epochs : {epoch+1}, Loss: {loss:.4f}")
 
      # backward prop
-     gradients = backward(y_batch, cache, params)
+     gradients = backward(y_batch, cache, params, activations = [relu, relu, softmax])
+
+     # Optimizer
+     optimizer = SGD(lr, params, gradients)
      # update weights
-     params = update_weights(lr, params, gradients)
+     params = optimizer.step()
      
     print(f"Epochs : {epoch+1}, Loss: {epoch_loss:.4f}")
-    return params
+  return params
 
 # Accuracy Check
-def accuracy(X, y_true, params):
-  y_pred, _ = forward(X, params)
+def accuracy(X, y_true, params, activations):
+  y_pred, _ = forward(X, params, activations)
   preds = np.argmax(y_pred, axis=0)
   return np.mean(preds == y_true)
 

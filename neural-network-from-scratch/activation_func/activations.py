@@ -13,3 +13,6 @@ def softmax(z):
 
 def relu(z):
    return np.maximum(0,z)
+
+def sigmoid_derviative(z):
+  return sigmoid(z) * (1 - sigmoid(z))

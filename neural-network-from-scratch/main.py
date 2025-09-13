@@ -22,6 +22,7 @@ y_train_oh = onehot(y_train, 10)
 # Parameters
 layers_dim = [784, 128, 64, 10]
 params = random_init(layers_dim)
+optimizer = Adam(lr, params, gradients, 1e-8)
 
 # Training loop 
 for epoch in range(epochs):
@@ -36,8 +37,7 @@ for epoch in range(epochs):
 
         # backward prop
         gradients = backward(y_batch, cache, params, activations)
-        optimizer = Adam(lr, params, gradients, 1e-8)
-        
+
         # update weights
         params = optimizer.step()
      

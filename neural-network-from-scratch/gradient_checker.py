@@ -2,7 +2,7 @@ import numpy as np
 from utils import forward, random_init, backward
 from numpy import linalg as LA
 from keras.datasets import mnist
-from utils import crossentropy
+from activation_func.activations import cross_entropy_from_logits
 import copy
 
 class GradCheck:
@@ -30,13 +30,14 @@ class GradCheck:
         the gradients at disposal are wrongly caclulated.
     """
 
-    def __init__(self, X, Y, layers_dim, epsilon, activations):
+    def __init__(self, X, Y, layers_dim, epsilon, activations, gradcheck = True):
         self.layers_dim = layers_dim
         self.X = X
         self.Y = Y
         self.epsilon = epsilon
         self.layers_dim = layers_dim
         self.activations = activations
+        self.gradcheck = gradcheck
 
     def initialize_params(self):
         parameters = random_init(self.layers_dim)
@@ -54,9 +55,9 @@ class GradCheck:
         parameters = {}
         start = 0
         for l in range(1, len(self.layers_dim)):
-            W_shape = (self.layers_dim[l], self.layers_dim[l-1])
+            W_shape = (self.layers_dim[l-1], self.layers_dim[l])
             W_size = np.prod(W_shape)
-            b_shape = (self.layers_dim[l], 1)
+            b_shape = (1, self.layers_dim[l])
             b_size = np.prod(b_shape)
 
             parameters[f"W{l}"] = vector[start:start+W_size].reshape(W_shape)
@@ -81,16 +82,16 @@ class GradCheck:
 
             theta_plus[i] += epsilon
             parameters_plus = self.vectors_to_dictionary(theta_plus)
-            y_pred, _ = forward(self.X, parameters_plus, activations = self.activations)
-            J_plus = crossentropy(y_pred = y_pred, y_true = self.Y) # obtaining J( theta + epsilon )
+            Z, cache = forward(self.X, parameters_plus, activations = self.activations, gradcheck = self.gradcheck)
+            J_plus, _ = cross_entropy_from_logits(Z = Z, y_true = self.Y) # obtaining J( theta + epsilon )
         
             # theta nudged down by epsilon
             theta_minus = copy.deepcopy(original_parameters)
 
             theta_minus[i] -= epsilon
             parameters_minus = self.vectors_to_dictionary(theta_minus)
-            y_pred, _ = forward(self.X, parameters_minus, activations = self.activations)
-            J_minus = crossentropy(y_pred = y_pred, y_true = self.Y) # obtaining J( theta - epsilon)
+            Z, cache = forward(self.X, parameters_minus, activations = self.activations, gradcheck = self.gradcheck)
+            J_minus, _ = cross_entropy_from_logits(Z = Z, y_true = self.Y) # obtaining J( theta - epsilon)
 
             # calculating numerical gradients for ith
             gradapprox[i] = (J_plus - J_minus) / (2*epsilon)
@@ -124,10 +125,10 @@ class GradCheck:
     
         # caching original forward prop parameters for backprop gradients at next step
         parameters_original = self.vectors_to_dictionary(parameters_vectorized)
-        _, cache = forward(self.X, parameters_original, self.activations)
+        Z, cache = forward(self.X, parameters_original, self.activations, self.gradcheck)
 
         # caching backprop gradients 
-        grad = backward(y_true = self.Y, cache = cache, params= parameters, activations = self.activations)
+        grad = backward(y_true = self.Y, dZL = Z, cache = cache, params= parameters, activations = self.activations, gradcheck = self.gradcheck)
         grad_true = self.dictionary_to_vectors(grad)
         
         gradapprox = self.gradients_zero_like(grad_true= grad_true, parameter_vectorized= parameters_vectorized, epsilon= self.epsilon)
@@ -137,5 +138,10 @@ class GradCheck:
         numerator = LA.norm((gradapprox - grad_true), ord = 2 )
         denominator = LA.norm(gradapprox, ord = 2) + LA.norm(grad_true, ord = 2)
         diff = numerator/denominator
+        print("Analytical grad:", analytical_grad.flatten()[:10])
+        print("Numerical grad:", numerical_grad.flatten()[:10])
+        print("Diff:", (analytical_grad - numerical_grad).abs().max())
+        print("Rel error:", ((analytical_grad - numerical_grad).abs() / (numerical_grad.abs() + analytical_grad.abs() + 1e-8)).max())
+
         
         return diff

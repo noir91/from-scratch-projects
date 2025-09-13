@@ -45,7 +45,7 @@ def batch_strategy(X, Y, batch_size):
         - Very stochastic, never converges to the global minima, but oscillates around it.
 
     """ 
-    m = X.shape[1]
+    m = X.shape[1s]
     num_batches = m // batch_size
     indices = np.random.permutation(m)
 

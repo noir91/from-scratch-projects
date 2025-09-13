@@ -15,48 +15,147 @@ class SGD:
         Vtheta = B*Vt-1 + (1-B)*Vt
 
     """
-    def __init__(self, lr, params, gradients, ema_momentum = 0.8, momentum = False):
+    def __init__(self, params, lr, beta = 0.9, momentum = False, batch_norm = False):
         self.lr = lr
         self.params = params
-        self.gradients = gradients
-        self.ema_momentum = ema_momentum
+        self.beta = beta
         self.momentum = momentum
         self.VdW = {}
-        self.Vdb = {}      
+        self.VdG = {}
+        self.VdB = {}
+        self.Vdb = {} 
 
-    def step(self): 
-        n = len(self.gradients)
-        num_layers = n // 2
-        if self.momentum == True:
+        self.batch_norm = batch_norm
+        self.num_layers = max(int(k[1:]) for k in self.params if k.startswith('W'))
 
-            # Initialize Velocity and history
-            for i in range(1, num_layers):    
-                self.VdW[f'W{i}'] = np.zeros_like(self.params[f'W{i}'])
-                self.Vdb[f'b{i}'] = np.zeros_like(self.params[f'b{i}'])
+        # Initialize Velocity and history
+        for i in range(1, self.num_layers + 1):  
+            #  Params
+            W = self.params[f'W{i}']
 
-            for i in range(1, num_layers):
+            if self.batch_norm and self.momentum:
+                
+                B = self.params[f'B{i}']
+                G = self.params[f'G{i}']
 
-                # Applying Velocity for momentum
-                self.VdW[f'W{i}'] = self.ema_momentum * self.VdW[f'W{i}'] + (1 - self.ema_momentum) * self.gradients[f'dW{i}']
-                self.Vdb[f'b{i}'] = self.ema_momentum * self.Vdb[f'b{i}'] + (1 - self.ema_momentum) * self.gradients[f'db{i}']
+                self.VdW[f'W{i}'] = np.zeros_like(W)
+                self.VdG[f'G{i}'] = np.zeros_like(G)
+                self.VdB[f'B{i}'] = np.zeros_like(B)
 
-                # Update rule
-                self.params[f'W{i}'] -= self.lr * self.VdW[f'W{i}']
-                self.params[f'b{i}'] -= self.lr * self.Vdb[f'b{i}']
+                if i == self.num_layers:
+                    b = self.params[f'b{i}']
+                    self.Vdb[f'b{i}'] = np.zeros_like(b)
 
-        else:      
+            elif not self.batch_norm and self.momentum:
 
-            for i in range(1, num_layers):
-                self.params[f'W{i}'] -= self.lr * self.gradients[f'dW{i}']
-                self.params[f'b{i}'] -= self.lr * self.gradients[f'db{i}']
+                b = self.params[f'b{i}']  
+
+                self.VdW[f'W{i}'] = np.zeros_like(W)
+                self.Vdb[f'b{i}'] = np.zeros_like(b)
+
+    def step(self, gradients): 
+        self.num_layers = max(int(k[2:]) for k in gradients if k.startswith('dW'))
+
+        # Updates Batch Norm w/Momentum
+        if self.batch_norm:
+            for i in range(1, self.num_layers + 1):
+                if i == self.num_layers:
+                    dW, db = gradients[f'dW{i}'], gradients[f'db{i}']
+                    W = self.params[f'W{i}']
+                    b = self.params[f'b{i}']
+                    break
+                
+                else:
+                    #  Gradients
+                    dW, dB, dG = gradients[f'dW{i}'], gradients[f'dB{i}'], gradients[f'dG{i}']
+
+                    #  Params
+                    W = self.params[f'W{i}']
+                    B = self.params[f'B{i}']
+                    G = self.params[f'G{i}']
+
+                # BatchNorm w/Momentum
+                if self.momentum:
+
+                    # Update Rule for last layer where Gamma and Beta are absent
+                        if i == self.num_layers:
+                            # Applying Velocity for momentum
+                            self.VdW[f'W{i}'] = self.beta * self.VdW[f'W{i}'] + (1 - self.beta) * dW
+                            self.Vdb[f'b{i}'] = self.beta * self.Vdb[f'b{i}'] + (1 - self.beta) * db
+
+                            # Update Rule
+                            W -= self.lr * self.Vdb[f'b{i}']
+                            b -= self.lr * self.Vdb[f'b{i}']
+
+                            # Restoring Variables
+                            self.params[f'W{i}'], self.params[f'b{i}'] = W, b
+                            break
+
+                    # Applying Velocity for momentum
+                        self.VdW[f'W{i}'] = self.beta * self.VdW[f'W{i}'] + (1 - self.beta) * dW
+                        self.VdB[f'B{i}'] = self.beta * self.VdB[f'B{i}']  + (1 - self.beta) * dB
+                        self.VdG[f'G{i}'] = self.beta * self.VdG[f'G{i}'] + (1 - self.beta) * dG
+
+                        # Update Rule
+                        W -= self.lr * self.VdW[f'W{i}']
+                        B -= self.lr * self.VdB[f'B{i}']
+                        G -= self.lr * self.VdG[f'G{i}']
+                        
+
+                        # Restoring Variables
+                        self.params[f'W{i}'], self.params[f'G{i}'], self.params[f'B{i}'] = W, G, B
+
+                # BatchNorm != w/Momentum                   
+                else:
+                    
+                    # Update Rule for last layer where Gamma and Beta are absent
+                        if i == self.num_layers:
+                            # Update Rule
+                            W -= self.lr * dW
+                            b -= self.lr * db
+
+                            # Restoring Variables
+                            self.params[f'W{i}'], self.params[f'b{i}'] = W, b
+                            break
+
+                        # Update Rule
+                        W -= self.lr * dW
+                        G -= self.lr * dG
+                        B -= self.lr * dB   
+
+                        # Restoring Variables
+                        self.params[f'W{i}'], self.params[f'G{i}'], self.params[f'B{i}'] = W, G, B
+
+        # Updates vanilla SGD w/Momentum
+        else:
         
+            for i in range(1, self.num_layers + 1):
+                #   Gradients
+                dW = gradients[f'dW{i}']
+                db = gradients[f'db{i}']
+
+                #  Params       
+                W = self.params[f'W{i}']
+                b = self.params[f'b{i}']    
+
+                if self.momentum:
+                    # Applying Velocity for momentum
+                    self.VdW[f'W{i}'] = self.beta * self.VdW[f'W{i}'] + (1 - self.beta) * dW
+                    self.Vdb[f'b{i}'] = self.beta * self.Vdb[f'b{i}'] + (1 - self.beta) * db
+
+                    # Restoring Variables
+                    self.params[f'W{i}'], self.params[f'b{i}'] = W, b
+
+                    # Update rule
+                    W -= self.lr * self.VdW[f'W{i}']
+                    b -= self.lr * self.Vdb[f'b{i}']
+                else:
+
+                    # Update rule
+                    W -= self.lr * dW
+                    b -= self.lr * db
+
+                    # Restoring Variables
+                    self.params[f'W{i}'], self.params[f'b{i}'] = W, b
+
         return self.params
-    
-    ## def clear_gradients(self):
-        n = len(self.gradients)
-        if n == 0:
-            pass
-        if n > 0:
-            for i in range(n):
-                self.gradients[f'dW{i}'] = np.zeros(self.gradients[f'dW{i}'])
-                self.gradients[f'db{i}'] = np.zeros(self.gradients[f'dW{i}'])

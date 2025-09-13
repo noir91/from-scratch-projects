@@ -1,76 +1,201 @@
 import numpy as np
-from activation_func.activations import relu, relu_derivative, sigmoid, softmax, sigmoid_derviative
+from activation_func.activations import relu, relu_derivative, sigmoid, softmax, sigmoid_derviative, cross_entropy_from_logits
 from optim.SGD import SGD
-def random_init(layers_dim):
-  np.random.seed(0)
-  params = {}
 
-  L = len(layers_dim) - 1
+def random_init(layers_dim, batch_norm = False):
+    np.random.seed(0)
+    params = {}
+    
+    L = len(layers_dim) - 1
 
-  for i in range(1, L+1):
-     params["W" + str(i)]= np.random.randn(layers_dim[i], layers_dim[i-1]) * np.sqrt(2. / layers_dim[i-1])
-     params["b" + str(i)]= np.zeros((layers_dim[i],1))
-  return params
+    if batch_norm == False:
+        for i in range(1, L+1):
+            params["W" + str(i)]= np.random.randn(layers_dim[i-1], layers_dim[i]) * np.sqrt(2. / layers_dim[i-1]) # changing the shapes from i i-1 to i-1 to i
+            params["b" + str(i)]= np.zeros((1,layers_dim[i]))
+            #--------------DEBUGGING-------------
+            #print(params['W' + str(i)].shape)
+            #print(params['b' + str(i)].shape)
+            #--------------DEBUGGING-------------
+    else:
+        for i in range(1, L+1):
+            params['W' + str(i)] = np.random.randn(layers_dim[i-1], layers_dim[i]) * np.sqrt(2. / layers_dim[i-1])
+            params['b' + str(i)] = np.zeros((1, layers_dim[i]))
+            params['B' + str(i)] = np.zeros((1, layers_dim[i]))
+            params['G' + str(i)] = np.ones((1, layers_dim[i]))
+            
+    return params
 
-def forward(X, params, activations = []):
-  # Caching X to A0
-  cache = {'A0': X}
-  num_layers = len(params) // 2
-
-  # Forward Propagation
-  for i in range(1,num_layers+1):
-    cache['Z' + str(i)] = params[f'W{i}'] @ cache[f'A{i-1}'] + params[f'b{i}']
-    cache['A' + str(i)] = activations[i-1](cache[f'Z{i}'])
-
-  y_pred = cache[f'A{num_layers}']
-
-  return y_pred, cache
-
-# Cross Entropy Loss
-def crossentropy(y_pred, y_true):
-  sample =-np.sum(y_true * np.log(y_pred + 1e-8) , axis = 0)
-  loss = np.mean(sample)
-  return loss
+def forward(X, params, activations = [], batch_norm = False, test = False):
+    # Caching X to A0
+    cache = {'A0': X}
+    num_layers = len(params) // 3 if batch_norm else len(params) // 2
+    count_i = 0
+                
+    # Forward Propagation with Batch normalization eliminating beta parameter
+    if batch_norm == True:
+        if not Rmu and not Rvar:
+            Rmu = {}
+            Rvar = {}
+        else:
+            pass
+        epsilon = 1e-9
+        ema_momentum = 0.9
+        # Intializing Velocity 
+        if not Rmu and not Rvar:
+            for i in range(1, num_layers):  
+                # (1, num_features)
+                Rmu[f'mu{i}'] = np.zeros((1, params[f'W{i}'].shape[1]))
+                Rvar[f'var{i}'] = np.zeros((1, params[f'W{i}'].shape[1]))
+        
+        # forward pass
+        for i in range(1, num_layers+1):
+            count_i +=1
+            cache['Z' + str(i)] = np.dot(cache[f'A{i-1}'], params[f'W{i}'])
+            
+            mu = np.mean(cache[f'Z{i}'], axis = 0, keepdims = True)
+            var = np.sqrt(np.var(cache[f'Z{i}']) + epsilon, axis = 0, keepdims = True)
+            
+            # storing seperate running mean and variances using EWMA
+            Rmu[f'mu{i}'] = ema_momentum * Rmu[f'mu{i-1}'] + (1 - ema_momentum) * mu
+            Rvar[f'mu{i}'] = ema_momentum * Rvar[f'var{i-1}'] + (1 - ema_momentum) * var
+            
+            cache['Z_norm' + str(i)] = (cache[f'Z{i}'] - mu) / var
+            cache['Z_tilde' + str(i)] = params[f'G{i}'] * cache[f'Z_norm{i}'] + params[f'B{i}']
+            
+            if count_i > 2:
+                continue
+            else:
+                cache['A' + str(i)] = activations[i-1](cache[f'Z_tilde{i}'])
+               
+        ZL_tilde = cache[f'Z_tilde{num_layers}']
+    else:
+    # Standard Forward Propagation
+        for i in range(1,num_layers+1):
+            count_i +=1
+            cache['Z' + str(i)] = np.dot(cache[f'A{i-1}'], params[f'W{i}']) + params[f'b{i}'] #changed the orientation from W.T+A to A.W
+            if count_i > 2:
+                continue
+            else:
+                cache['A' + str(i)] = activations[i-1](cache[f'Z{i}'])
+                
+                #--------------DEBUGGING-------------
+                #print(f'Z{i} : {cache['Z' + str(i)].shape}')
+                #print(f'A{i} : {cache['A' + str(i)].shape}')
+                #print(f'A{i}.max = {cache['A' + str(i)]}')
+                #--------------DEBUGGING-------------
+        
+        ZL = cache[f'Z{num_layers}'] #changed y_pred from y_pred = cache[f'A{num_layers}'] to cache[f'Z{num_layers}'] to be used by cross_entropy_with_logits
+    return (ZL_tilde, cache) if batch_norm else (ZL, cache)
 
 # Backward propagation
-def backward(y_true, cache, params, activations = []):
-  m = y_true.shape[1]
-  L = len(params) // 2
-
-  # Performing backpropogation for last layer since it does not follow a general format
-  AL = cache['A' + str(L)]
-  dZL =  AL - y_true
-  A_prev = np.dot(params[f'W{L}'].T, dZL)
-
-  dWL = (1.0 / m) * np.dot(dZL, A_prev.T)
-  dbL = (1.0 / m) * np.sum(dZL, axis = 1, keepdims = True)
-  gradients = {'dZ' + str(L): dZL,
-               'dW' + str(L): dWL,
-               'db' + str(L): dbL
-               }
-  
-  # Calculating Back propagation on the rest of the network
-  for l in reversed(range(1, L)): 
-    gradients['dA' + str(l)] = np.dot(params[f'W{l+1}'].T, gradients[f'dZ{l+1}'])
-    # If Activation function is a sigmoid, use derivative of a sigmoid
-    if activations[l-1] == sigmoid:
-      gradients['dZ' + str(l)] = gradients[f'dA{l}'] * sigmoid_derviative(cache[f'Z{l}'])
+def backward(y_true, dZL, cache, params, activations = [], gradcheck = False, batch_norm = False):
+    m = y_true.shape[0]
+    L = len(params) // 3 if batch_norm else len(params) // 2
+    epsilon = 1e-9
     
-    # Else use derivative of ReLU
-    else:
-      gradients['dZ' + str(l)] = gradients[f'dA{l}'] * relu_derivative(cache[f'Z{l}'])
-      gradients['dW' + str(l)] = (1.0 / m) * np.dot(gradients[f'dZ{l}'], cache[f'A{l-1}'].T)
-      gradients['db' + str(l)] = (1.0 / m) * np.sum(gradients[f'dZ{l}'], axis = 1, keepdims = True)
+    if batch_norm == True:
+        # Side note: dZL here isn't dZL infact, it is the last Z_tilde parameter from forward propagation
+        A_prev = cache['A' + str(L-1)]
+        
+        # Batch norm dZL_tilde
+        var = np.var(cache[f'Z{L}'])
+        gamma = params[f'G{L}']
+        ZL_norm = cache[f'Z_norm{L}']
+        
+        dZL_tilde = (1.0 / m) * 1 / np.sqrt(var + epsilon) * ( 
+            (m * dZL * gamma) 
+            - np.sum(dZL* gamma, axis = 0, keepdims = True) 
+            - ZL_norm * np.sum(dZL * gamma * ZL_norm, axis = 0, keepdims = True)
+        )
+        
+        dGL = np.sum(dZL_tilde * cache[f'Z_norm{L}'], axis= 0, keepdims = True)
+        dBL = np.sum(dZL_tilde, axis = 0, keepdims = True)
+        
+        dWL = (1.0 / m) * np.dot(A_prev.T, dZL_tilde)
+        
+        gradients = {'dZ' + str(L): dZL_tilde,
+                   'dW' + str(L): dWL,
+                   'dB' + str(L): dBL,
+                    'dG' + str(L): dGL
+                    }
+        
+        # Back propagating the rest of the network
+        for l in reversed(range(1, L)): 
+            
+            # parameters to be used
+            var = np.var(cache[f'Z{l}'], axis = 0, keepdims = True)
+            gamma = params[f'G{l}']
+            Z_tilde = cache[f'Z_tilde{l}']
+            Z_norm = cache[f'Z_norm{l}']
 
-  # Storing dW and db to gradients
-  gradients = {k: v for k, v in gradients.items() if k.startswith('dW') or k.startswith('db')}
-  return gradients
+            # Finding gradients
+            gradients['dA' + str(l)] = np.dot(gradients[f'dZ{l+1}'], params[f'W{l+1}'].T)
+
+            # Activations through backprop
+            if activations[l-1] == sigmoid:
+              gradients['dZ' + str(l)] = gradients[f'dA{l}'] * sigmoid_derviative(Z_tilde)
+            else:
+              gradients['dZ' + str(l)] = gradients[f'dA{l}'] * relu_derivative(Z_tilde)
+            gradients['dG' + str(l)] = np.sum(gradients[f'dZ{l}'] * cache[f'Z_norm{l}'], axis = 0, keepdims = True)
+            gradients['dB' + str(l)] = np.sum(gradients[f'dZ{l}'], axis = 0, keepdims = True)
+            
+            dZl_tilde = (1.0 / m) * 1 / np.sqrt(var + epsilon) * ( 
+                (m * gradients[f'dZ{l}'] * gamma) 
+                - np.sum(gradients[f'dZ{l}']* gamma,  axis = 0, keepdims = True) 
+                - Z_norm * np.sum(gradients[f'dZ{l}'] * gamma * Z_norm, axis = 0, keepdims = True)
+            )
+            
+            gradients['dW' + str(l)] = (1.0 / m) * np.dot(cache[f'A{l-1}'].T, dZl_tilde)  
+        gradients = {k: v for k, v in gradients.items() if k.startswith(('dW','dB','dG'))}
+            
+    # Performing backpropogation for last layer since it does not follow a general format
+    else:
+        #AL = cache['A' + str(L)]
+        #dZL =  AL - y_true
+        A_prev = cache['A' + str(L-1)]
+        
+        dWL = (1.0 / m) * np.dot(A_prev.T, dZL)
+        dbL = (1.0 / m) * np.sum(dZL, axis = 0, keepdims = True)
+        gradients = {'dZ' + str(L): dZL,
+                   'dW' + str(L): dWL,
+                   'db' + str(L): dbL
+                   }
+        
+        #--------------DEBUGGING-------------
+        #print(f'dZ{L} : {gradients['dZ' + str(L)].shape}')
+        #print(f'dW{L} : {gradients['dW' + str(L)].shape}')
+        #print(f'db{L} : {gradients['db' + str(L)].shape}')
+        #--------------DEBUGGING-------------
+        
+        # Calculating Back propagation on the rest of the network
+        for l in reversed(range(1, L)): 
+            gradients['dA' + str(l)] = np.dot(gradients[f'dZ{l+1}'], params[f'W{l+1}'].T) # switched their positions
+
+            # Activations for backprop
+            if activations[l-1] == sigmoid:
+                gradients['dZ' + str(l)] = gradients[f'dA{l}'] * sigmoid_derviative(cache[f'Z{l}'])
+            else:
+                gradients['dZ' + str(l)] = gradients[f'dA{l}'] * relu_derivative(cache[f'Z{l}'])
+            gradients['dW' + str(l)] = (1.0 / m) * np.dot(cache[f'A{l-1}'].T, gradients[f'dZ{l}']) #switched their
+            gradients['db' + str(l)] = (1.0 / m) * np.sum(gradients[f'dZ{l}'], axis = 0, keepdims = True) #changed axis 1 to 0
+            
+               #--------------DEBUGGING-------------
+              #print(f'dA{l} : {gradients['dA' + str(l)].shape}')
+              #print(f'dZ{l} : {gradients['dZ' + str(l)].shape}')
+              #print(f'dW{l} : {gradients['dW' + str(l)].shape}')
+              #print(f'db{l} : {gradients['db' + str(l)].shape}')
+            
+            #--------------DEBUGGING-------------
+        # Storing dW and db to gradients
+        gradients = {k: v for k, v in gradients.items() if k.startswith(('dW','db'))}
+    return gradients 
 
 # One-Hot Encoding
+# I flipped the axis to row wise from column wise
 def onehot(y, classes):
 
-  one_hot_y = np.zeros((classes, y.size))
-  one_hot_y[y, np.arange(y.size)] = 1
+  one_hot_y = np.zeros((y.size, classes))
+  one_hot_y[np.arange(y.size), y] = 1
   return one_hot_y
 
 # Training
@@ -116,10 +241,16 @@ def train(lr, X, y_true, layers_dim, epochs):
   return params
 
 # Accuracy Check
-def accuracy(X, y_true, params, activations):
-  y_pred, _ = forward(X, params, activations)
-  preds = np.argmax(y_pred, axis=0)
-  return np.mean(preds == y_true)
+# changed axis to 1 , for row outputs. If i get a problem here in the future make the axis = 0
+def accuracy(X, y_true, params, activations, batch_norm = False):
+    if batch_norm:
+        y_pred, _ = forward(X, params, activations, batch_norm = True)
+        preds = np.argmax(y_pred, axis=1)
+        return np.mean(preds == y_true)
+    else:
+        y_pred, _ = forward(X, params, activations)
+        preds = np.argmax(y_pred, axis=1)
+        return np.mean(preds == y_true)
 
 # Update gradients
 def update_weights(lr,  params, gradients):
@@ -133,3 +264,12 @@ def update_weights(lr,  params, gradients):
   params["b3"] -= lr*gradients["db3"]
   
   return params
+
+def compute_validation_loss(model, X_val, y_val, activations, batch_norm=False):
+    # Forward pass on validation data
+    Z_val, _ = model.forward(X_val, activations, batch_norm=batch_norm, test=True)
+    
+    # Compute cross-entropy loss
+    loss, _ = cross_entropy_from_logits(Z_val, y_val)
+    
+    return loss

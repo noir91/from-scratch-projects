@@ -1,6 +1,6 @@
 # From Scratch Projects
 
-Version: v0.1.0
+Version: v1.1.0
 
 A from-scratch machine learning playground for neural networks, research papers, and core algorithms.
 
@@ -200,6 +200,6 @@ The model currently uses a small fully connected network with a [784, 128, 64, 1
 
 I made neural networks from scratch with optimizers, batch normalization, deep layers, gradient checking for back propagation check, to externalize theoritcal knowledge learned in Deep Learning Specialization.
 
-If you hit a runtime issue, check the main training loop and helper imports first. The repo is already structured for learning, debugging, and iteration, but a few rough edges are still being worked through.
+If you hit a runtime issue, check the main training loop and helper imports first. The repo is modular and structured for iteration.
 
 * * *

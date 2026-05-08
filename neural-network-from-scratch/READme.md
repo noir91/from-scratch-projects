@@ -145,15 +145,25 @@ Used for quick iteration before moving logic into the main code path.
 
 Function Module What it does
 `onehot` `utils.py` Converts labels to one-hot vectors
+
 `accuracy` `utils.py` Computes model accuracy
+
 `random_init` `utils.py` Initializes weights and biases
+
 `forward` `utils.py` Runs the forward pass
+
 `backward` `utils.py` Computes gradients
+
 `cross_entropy_from_logits` `activation_func/activations.py` Computes loss and gradient from logits
+
 `batch_strategy` `dataloader/batch_strategy.py` Produces full, mini, or stochastic batches
+
 `relu` `activation_func/activations.py` ReLU activation
+
 `softmax` `activation_func/activations.py` Output activation
+
 `Adam` `optim/Adam.py` Optimizer used for parameter updates
+
 `gradient_checker` `gradient_checker.py` Gradient validation utility
 
 * * *

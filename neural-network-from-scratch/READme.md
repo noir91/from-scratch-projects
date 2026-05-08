@@ -198,14 +198,8 @@ The model currently uses a small fully connected network with a [784, 128, 64, 1
 
 ## Notes
 
-This branch is still active development.
+I made neural networks from scratch with optimizers, batch normalization, deep layers, gradient checking for back propagation check, to externalize theoritcal knowledge learned in Deep Learning Specialization.
 
 If you hit a runtime issue, check the main training loop and helper imports first. The repo is already structured for learning, debugging, and iteration, but a few rough edges are still being worked through.
 
 * * *
-
-## Philosophy
-
-If you cannot trace a number from input to gradient, the system is too complex.
-
-This project exists to keep every step visible.

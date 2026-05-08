@@ -1,10 +1,7 @@
-# From Scratch Projects
+# Neural Networks from scratch
 
 Version: v1.1.0
 
-A from-scratch machine learning playground for neural networks, research papers, and core algorithms.
-
-The goal is to keep the implementation explicit, inspectable, and small enough that every step in the pipeline can be traced by hand.
 
 * * *
 

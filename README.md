@@ -1,2 +1,3 @@
 # from-scratch-projects
-Here, I'll upload research papers and algorithms from scratch.
+A from-scratch machine learning playground for neural networks, research papers, and core algorithms.
+
